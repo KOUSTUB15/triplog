@@ -1,0 +1,249 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trip Expense Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Poppins;}
+body{
+background:linear-gradient(135deg,#667eea,#764ba2);
+min-height:100vh;display:flex;justify-content:center;align-items:center;
+transition:.4s;
+}
+.dark{background:linear-gradient(135deg,#000428,#004e92);}
+.app{
+width:380px;background:#fff;border-radius:20px;padding:15px;box-shadow:0 0 20px rgba(0,0,0,.3);
+animation:fadeIn .7s;
+}
+.dark .app{background:#111;color:#fff;}
+h2{text-align:center;margin-bottom:10px;}
+input,select,button{
+width:100%;padding:8px;margin:5px 0;border-radius:10px;border:none;outline:none;
+}
+button{
+background:linear-gradient(135deg,#667eea,#764ba2);
+color:#fff;font-weight:bold;cursor:pointer;
+transition:.3s;
+}
+button:hover{transform:scale(1.05);}
+.list{max-height:220px;overflow:auto;}
+.card{
+background:linear-gradient(135deg,#43cea2,#185a9d);
+color:#fff;padding:10px;border-radius:15px;margin:6px 0;
+animation:slide .4s;
+}
+.card button{
+background:red;margin-top:5px;
+}
+.memberCard{
+background:linear-gradient(135deg,#ff9a9e,#fad0c4);
+color:#000;padding:10px;border-radius:15px;margin:6px 0;
+animation:slide .4s;
+}
+.toggle{
+display:flex;justify-content:space-between;
+}
+@keyframes slide{from{transform:translateX(50px);opacity:0}to{opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+</style>
+</head>
+
+<body>
+  <div id="loginBox" style="width:360px;background:#fff;padding:20px;border-radius:20px;box-shadow:0 0 20px rgba(0,0,0,.3);display:none;">
+  <h2 style="text-align:center;">Trip Expense Login</h2>
+  <input type="text" id="username" placeholder="Username">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+  <p id="loginMsg" style="color:red;text-align:center;"></p>
+</div>
+
+<div class="app" id="appBox" style="display:none;">
+
+<h2>Trip Expense Manager</h2>
+
+<div class="toggle">
+<button onclick="toggleTheme()">🌙 Theme</button>
+<button onclick="resetTrip()">♻ Reset</button>
+</div>
+
+<input type="text" id="search" placeholder="Search Member" onkeyup="renderMembers()">
+
+<h3>Add Member</h3>
+<input type="text" id="memberName" placeholder="Member Name">
+<button onclick="addMember()">Add Member</button>
+
+<h3>Add Expense</h3>
+<select id="memberSelect"></select>
+<input type="text" id="expenseName" placeholder="Expense Name (Food/Toll)">
+<input type="number" id="expenseAmount" placeholder="Amount">
+<button onclick="addExpense()">Add Expense</button>
+
+<h3>Members</h3>
+<div class="list" id="members"></div>
+<button onclick="logout()">🚪 Logout</button>
+
+</div>
+
+<script>
+  const USERNAME = "mani";
+const PASSWORD = "1594";
+
+function login(){
+  let u = document.getElementById("username").value;
+  let p = document.getElementById("password").value;
+
+  if(u === USERNAME && p === PASSWORD){
+    localStorage.setItem("loggedIn","true");
+    showApp();
+  } else {
+    document.getElementById("loginMsg").innerText = "Invalid Username or Password";
+  }
+}
+
+function logout(){
+  localStorage.removeItem("loggedIn");
+  location.reload();
+}
+
+function showApp(){
+  document.getElementById("loginBox").style.display="none";
+  document.getElementById("appBox").style.display="block";
+}
+
+window.onload = function(){
+  if(localStorage.getItem("loggedIn") === "true"){
+    showApp();
+  } else {
+    document.getElementById("loginBox").style.display="block";
+  }
+};
+
+let members = JSON.parse(localStorage.getItem("members")) || [];
+
+function save(){
+localStorage.setItem("members",JSON.stringify(members));
+renderMembers();
+renderSelect();
+}
+
+function addMember(){
+let name=document.getElementById("memberName").value;
+if(!name)return;
+members.push({name,expenses:[]});
+document.getElementById("memberName").value="";
+save();
+}
+
+function addExpense(){
+let m=document.getElementById("memberSelect").value;
+let en=document.getElementById("expenseName").value;
+let amt=document.getElementById("expenseAmount").value;
+if(!en||!amt)return;
+members[m].expenses.push({name:en,amount:Number(amt)});
+document.getElementById("expenseName").value="";
+document.getElementById("expenseAmount").value="";
+save();
+}
+
+function renderSelect(){
+let sel=document.getElementById("memberSelect");
+sel.innerHTML="";
+members.forEach((m,i)=>{
+sel.innerHTML+=`<option value="${i}">${m.name}</option>`;
+});
+}
+
+function renderMembers(){
+let search=document.getElementById("search").value.toLowerCase();
+let box=document.getElementById("members");
+box.innerHTML="";
+members.forEach((m,i)=>{
+if(!m.name.toLowerCase().includes(search))return;
+let total=m.expenses.reduce((a,b)=>a+b.amount,0);
+let html=`<div class="memberCard" id="pdf${i}">
+<b contenteditable="true" onblur="editMember(${i},this.innerText)">${m.name}</b>
+<p>Total: ₹${total}</p>
+<button onclick="generateAndSharePDF(${i})">📤 Share PDF</button>
+<button onclick="downloadPDF(${i})">⬇ Download PDF</button>
+
+<button onclick="deleteMember(${i})">Delete Member</button>
+`;
+m.expenses.forEach((e,j)=>{
+html+=`
+<div class="card">
+<input value="${e.name}" onchange="editExpenseName(${i},${j},this.value)">
+<input type="number" value="${e.amount}" onchange="editExpenseAmount(${i},${j},this.value)">
+<button onclick="deleteExpense(${i},${j})">Delete</button>
+</div>
+`;
+});
+html+="</div>";
+box.innerHTML+=html;
+});
+}
+
+function editMember(i,name){members[i].name=name;save();}
+function editExpenseName(i,j,val){members[i].expenses[j].name=val;save();}
+function editExpenseAmount(i,j,val){members[i].expenses[j].amount=Number(val);save();}
+
+function deleteMember(i){
+members.splice(i,1);
+save();
+}
+
+function deleteExpense(i,j){
+members[i].expenses.splice(j,1);
+save();
+}
+
+function resetTrip(){
+if(confirm("Reset entire trip?")){
+members=[];
+save();
+}
+}
+
+function toggleTheme(){
+document.body.classList.toggle("dark");
+document.getElementById("app").classList.toggle("dark");
+}
+
+function downloadPDF(i){
+let element=document.getElementById("pdf"+i);
+html2pdf().from(element).save(members[i].name+"_expenses.pdf");
+}
+
+renderSelect();
+renderMembers();
+async function generateAndSharePDF(i){
+  let element = document.getElementById("pdf"+i);
+
+  const opt = {
+    margin: 0.5,
+    filename: members[i].name + "_expenses.pdf",
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+  };
+
+  const pdfBlob = await html2pdf().from(element).set(opt).outputPdf('blob');
+
+  const file = new File([pdfBlob], members[i].name+"_expenses.pdf", { type: "application/pdf" });
+
+  if (navigator.share) {
+    navigator.share({
+      title: "Trip Expenses",
+      text: "Here is my trip expense report",
+      files: [file]
+    });
+  } else {
+    alert("Sharing not supported on this browser. Please download PDF.");
+    html2pdf().from(element).save(members[i].name+"_expenses.pdf");
+  }
+}
+
+</script>
+</body>
+</html>
